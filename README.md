@@ -165,10 +165,69 @@ return normed_features
 * Sklearn has a nifty function called [GridSearchCV](http://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html) that allows one to specify a range of C values, gamma values, and kernels, and essentially extract the classifier (and set of params) that perform best for given dataset. I used this function to help me settle on a sigmoid kernel for trained SVM. GridSearchCV ultimately recommended a sigmoid classifer with C=93 and gamma=.001 with accuracy of 93% for the 2400 feature [training_set.sav](./output/training_set.sav)
 * However, I found that although the classifier recommended by GridSearchCV had high accuracy rates in training (and performed perfectly in test1.world and test2.world) the classifier only correctly recognized 7/8 objects in test3.world (consistently misclassified glue for biscuits)
 * Using the classifier recommendation given by GridSearchCV as a basepoint and tinkering around a bit with the values for C and gamma, I settled on a sigmoid classifier with param values of C=40 and gamma=.0001. This classifier has slighly lower accuracy (90%) than the classifier recommended by GridSearchCV but performs perfectly in all three worlds.
-* I am guessing the classifer recommended by GridSearchCV slightly suffered from overfitting. Likewise, it makes sense by final classifier performed better because I lowered C (which controls tradeoff between smooth decision boundary and classifying points correctly; higher C results in greater emphasis on classifying points correctly) and gamma (which defines how far the influence of a single training example reaches; higher gamma results in greater emphasis on fitting close points)
+* I assume the classifer recommended by GridSearchCV suffered from overfitting (RBF classifiers as well displayed this problem). Likewise, it makes sense the final classifier I ended with performed better because I lowered C (which controls tradeoff between smooth decision boundary and classifying points correctly; higher C results in greater emphasis on classifying points correctly) and gamma (which defines how far the influence of a single training example reaches; higher gamma results in greater emphasis on fitting close points)
+
+```python
+from sklearn import svm, grid_search, cross_validation, metrics
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+# Search for best classifier in SVC search space
+################################################################################
+print 'Searching for best classifier in search space...'
+start_time = time.time()
+parameters = dict(
+  kernel=['linear', 'sigmoid'],
+  C=[.5, 1, 5, 10, 80, 85, 90, 91, 92, 93, 95, 97, 100],
+  gamma=[0.01, 0.001, 0.0015, 0.002, 0.003, 0.005, 0.008, 0.0001, .00015, 0.0007, .0008, .0009, 0])
+clf = grid_search.GridSearchCV(svm.SVC(probability=True), parameters, verbose=1).fit(X_train, y_train)
+classifier = clf.best_estimator_
+print '* Best Parameters (kernel, C, gamma):', clf.best_params_
+print '* Time elapsed:', time.time() - start_time
+################################################################################
+```
 
 ##### Normalized Confusion Matrix (Sigmoid, C=.40, gamma=.0001, accuracy=90%)
 <p align="center"> <img src="./output/normalized_confusion_matrix_sigmoid_c40_gamma001_features2400.png"></p>
 
+### 3D Perception Results (✔)
+* At first, before I optimized the threshold scale factor for the statistical outlier filter and the leaf size of the voxel grid downsample filter, results for test3.world would oscillate 7/8 and 8/8. However, once I optimized these filter parameters, object recognition result for test3.world is consistently 8/8.
+* Total object perception and filtering time in pcl_callback() takes a couple of seconds (with most time being spent on conversion of ROS PointCloud2 message to a pcl PointXYZRGB). Statistical outlier filter takes a couple of seconds, whereas passthrough, voxel grid downsample, and segmentation occur on the scale of milliseconds
+<p align="center"> <img src="./output/output_1_labels.png"></p>
+<p align="center"> <img src="./output/output_2_labels.png"></p>
+<p align="center"> <img src="./output/output_3_labels.png"></p>
 
+#### Collision Map Implementation (Sigmoid, C=.40, gamma=.0001, accuracy=90%)
+* Collision map helped prevent objects from being knocked over while picking up other objects
+* For each detected object in pr2_mover(), merge ros clouds of table and all other detected objects that come next in detected objects list to build collision map
+* After publishing collision map for a particular object and calling service “pick_and_place_routine”, clear the collision map by calling /clear_octomap
+```python
+# establish collision map
+other_detected_objects = detected_objects[index + 1:]
+ros_cloud_other_objects_data = []
+if other_detected_objects:
+    ros_cloud_other_objects_data = [[xyzrgb for xyzrgb in pc2.read_points(other_object.cloud, 
+        skip_nans=True, field_names=("x", "y", "z", "rgb"))] for other_object in other_detected_objects]
+    ros_cloud_other_objects_data = np.concatenate(ros_cloud_other_objects_data).tolist()
+collision_map_pcl_data = pcl.PointCloud_PointXYZRGB()
+collision_map_pcl_data.from_list(ros_cloud_table_data + ros_cloud_other_objects_data)
+collision_map = pcl_to_ros(collision_map_pcl_data)
+pcl_collision_map_pub.publish(collision_map)
+```
+
+```python
+# clear collision map
+print '* Clearing collision map'
+rospy.wait_for_service('/clear_octomap')
+clear_collision_map = rospy.ServiceProxy('/clear_octomap', Empty)
+clear_collision_map()
+```
+<p align="center"> <img src="./output/world2_collision_map.png"></p>
+<p align="center"> <img src="./output/world2_collision_map_2.png"></p>
+
+### Next Steps
+* Improve Speed: Writing and compiling code in C++
+
+* Reducing graphics memory load of project: For this project, I had to operate exclusively in Rviz because VMware virtual machine could not take the graphics memory load that occurred from running gazebo with gui (I had to set gui=false for this project and change the graphics memory settings of the virtual machine to get project to run properly).
+Optimize project for Gazebo use
+
+* Add friction to objects / optimize pick up routine: PR2 robot is prone to drop objects in pick and place routine (especially if PR2 robot is not given sufficient time to firmly grasp an object).
 
