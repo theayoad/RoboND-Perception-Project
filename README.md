@@ -12,11 +12,10 @@
 
 Below images are based on [test1.world](https://github.com/theayoad/RoboND-Perception-Project/blob/master/pr2_robot/worlds/test1.world)
 
-##### Statistical Outlier Removal (k = 50, x = .05) 
-</br>
+#### Statistical Outlier Removal (k = 50, x = .05) 
 * The pcl.StatisticalOutlierRemovalFilter computes the mean distance of each point to k number of neighbors. All points whose mean distance (to neighbors) is greater than the global_mean_distance + x * global_std_dev are considered to be outliers and removed from the point cloud.
 
-<p align="center"> <img src="./output/world1_statistical_outlier_filter_output.png"> </p>
+<p align="center"> <img src="./output/world1_statistical_outlier_filter_output.png"></p>
 
 ```python
 # Statistical Outlier Filtering
@@ -27,8 +26,7 @@ outlier_filter.set_std_dev_mul_thresh(x) # outlier > global_mean_distance + x*gl
 point_cloud_filtered = outlier_filter.filter()
 ```
 
-##### Voxel Grid Downsampling (leaf_size = .005)
-</br>
+#### Voxel Grid Downsampling (leaf_size = .005)
 * The pcl.VoxelGridFilter class assembles a local 3D grid over a given PointCloud and downsamples the point cloud data based on user specified voxel grid leaf size.
 
 <p align="center"> <img src="./output/world1_voxel_grid_downsample_output.png"> </p>
@@ -41,8 +39,7 @@ vox.set_leaf_size(leaf_size, leaf_size, leaf_size)
 point_cloud_filtered = vox.filter()
 ```
 
-##### PassThrough  (y=[-.42, .42], z=[.6, 1.8])
-</br>
+#### PassThrough  (y=[-.42, .42], z=[.6, 1.8])
 * The pcl.PassThroughFilter class removes points from point cloud that do not meet constraints / limits for a particular field of the point type.
 * Z-axis filtering in range of [.6, 1.8] ensures only table + objects data make up point cloud
 * Y-axis filtering in range of [-.42, .42] prevents bin recognition
@@ -61,9 +58,8 @@ passthrough.set_filter_limits(0.6, 1.8) # only table + objects
 point_cloud_filtered = passthrough.filter()
 ```
 
-##### RANSAC Plane Fitting (dist=.01) 
-</br>
-* The pcl.Segmentation class runs sample consensus methods and models. Specifically, the RANSAC algorithm involves iterated hypothesis and verification of point cloud data: a hypothetical shape of the specified model (pcl.SACMODEL_PLANE) is generated  by selecting a minimal subset of n-points at random and evaluating the corresponding shape to model fit. 
+#### RANSAC Plane Fitting (dist=.01) 
+* The pcl.Segmentation class runs sample consensus methods and models. Specifically, the RANSAC algorithm involves iterated hypothesis and verification of point cloud data: a hypothetical shape of the specified model (pcl.SACMODEL_PLANE) is generated  by selecting a minimal subset of n-points at random and evaluating the corresponding shape to model fit. The images below the result of plane fitting: points that correspond to plane (inliers) are extracted to yield point cloud of table and points that do not correspond to plane (outliers) are extracted to yield point cloud of tabletop objects.
 
 <p align="center"> <img src="./output/world1_cloud_table.png"> </p>
 <p align="center"> <img src="./output/world1_cloud_objects.png"> </p>
