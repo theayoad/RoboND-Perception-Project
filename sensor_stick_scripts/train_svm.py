@@ -78,7 +78,7 @@ print '* Best Parameters (kernel, C, gamma):', clf.best_params_
 print '* Time elapsed:', time.time() - start_time
 
 # Create classifier (Uncomment if you want to create classifier  directly
-# (as opposed to searching for best classifier in search space)
+# as opposed to searching for best classifier in search space)
 # classifier = svm.SVC(kernel='sigmoid', C=40, gamma=.0001)
 ################################################################################
 
