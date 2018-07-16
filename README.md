@@ -191,11 +191,11 @@ print '* Time elapsed:', time.time() - start_time
 ### 3D Perception Results (✔)
 * At first, before I optimized the threshold scale factor for the statistical outlier filter and the leaf size of the voxel grid downsample filter, results for test3.world would oscillate 7/8 and 8/8. However, once I optimized these filter parameters, object recognition result for test3.world is consistently 8/8.
 * Total object perception and filtering time in pcl_callback() takes a couple of seconds (with most time being spent on conversion of ROS PointCloud2 message to a pcl PointXYZRGB). Statistical outlier filter takes a couple of seconds, whereas passthrough, voxel grid downsample, and segmentation occur on the scale of milliseconds
-<p align="center"> <img src="./output/output_1_labels.png"></p>
-<p align="center"> <img src="./output/output_2_labels.png"></p>
-<p align="center"> <img src="./output/output_3_labels.png"></p>
+<p align="center"> <img src="./output/output_1_labels.png" height="60%" width="60%"></p>
+<p align="center"> <img src="./output/output_2_labels.png" height="60%" width="60%"></p>
+<p align="center"> <img src="./output/output_3_labels.png" height="60%" width="60%"></p>
 
-#### Collision Map Implementation (Sigmoid, C=.40, gamma=.0001, accuracy=90%)
+#### Collision Map Implementation
 * Collision map helped prevent objects from being knocked over while picking up other objects
 * For each detected object in pr2_mover(), merge ros clouds of table and all other detected objects that come next in detected objects list to build collision map
 * After publishing collision map for a particular object and calling service “pick_and_place_routine”, clear the collision map by calling /clear_octomap
