@@ -59,7 +59,9 @@ point_cloud_filtered = passthrough.filter()
 ```
 
 #### RANSAC Plane Fitting (dist=.01) 
-* The pcl.Segmentation class runs sample consensus methods and models. Specifically, the RANSAC algorithm involves iterated hypothesis and verification of point cloud data: a hypothetical shape of the specified model (pcl.SACMODEL_PLANE) is generated  by selecting a minimal subset of n-points at random and evaluating the corresponding shape to model fit. The images below the result of plane fitting: points that correspond to plane (inliers) are extracted to yield point cloud of table and points that do not correspond to plane (outliers) are extracted to yield point cloud of tabletop objects.
+* The pcl.Segmentation class runs sample consensus methods and models. Specifically, the RANSAC algorithm involves iterated hypothesis and verification of point cloud data: a hypothetical shape of the specified model (i.e pcl.SACMODEL_PLANE) is generated  by selecting a minimal subset of n-points at random and evaluating the corresponding shape to model fit. The images below the result of plane fitting: 
+* Points that correspond to plane (inliers) are extracted to yield point cloud of table
+* Points that do not correspond to plane (outliers) are extracted to yield point cloud of tabletop objects.
 
 <p align="center"> <img src="./output/world1_cloud_table.png"> </p>
 <p align="center"> <img src="./output/world1_cloud_objects.png"> </p>
@@ -77,21 +79,96 @@ cloud_objects = point_cloud_filtered.extract(inliers, negative=True)
 ```
 
 
-#### 2. Complete Exercise 2 steps: Pipeline including clustering for segmentation implemented.  
+#### 2. Complete Exercise 2 steps | Pipeline including clustering for segmentation implemented.  
 
-#### 2. Complete Exercise 3 Steps.  Features extracted and SVM trained.  Object recognition implemented.
-Here is an example of how to include an image in your writeup.
+#### DBSCAN / Euclidean Clustering (dist_tol=.025, min_cluster_size=10, max_cluster_size=5500) 
+* The DBSCAN algorithm creates clusters by grouping data points that are within some threshold distance (dist_tol) from the other data points. Cluster inclusion depends on euclidean distance (hence, alternative name Euclidean clustering instead of DBSCAN). There are minimum and maximum cluster size limits: if a point has at least (min_cluster_size - 1) neigbhors within dist_tol than that point is a "core member", otherwise point is designated an "edge member". If a point has no neigbors within dist_tol, that point is designated an outlier (essentially treated as noise)
+* Specific values for threshold distance (dist_tol), min_cluster_size, and max_cluster_size were derived via trial and error. If min_cluster_size is too large, clustering performance degrades drastically. If dist_tol is too large or too small, clustering performance degrades drastically. I found that there was a little more room for error when it came to defining max_cluster_size
+* Below image is based on [test2.world](https://github.com/theayoad/RoboND-Perception-Project/blob/master/pr2_robot/worlds/test2.world)
 
-![demo-1](https://user-images.githubusercontent.com/20687560/28748231-46b5b912-7467-11e7-8778-3095172b7b19.png)
+<p align="center"> <img src="./output/world2_cluster_cloud.png"> </p>
 
-### Pick and Place Setup
+```python
+# Euclidean Clustering
+white_cloud = XYZRGB_to_XYZ(cloud_objects)
+tree = white_cloud.make_kdtree()
+ec = white_cloud.make_EuclideanClusterExtraction()
+ec.set_ClusterTolerance(0.025) # distance tolerance
+ec.set_MinClusterSize(10)
+ec.set_MaxClusterSize(5500)
+ec.set_SearchMethod(tree)
+cluster_indices = ec.Extract() # extract indices for each of the discovered clusters
+# Create Cluster-Mask Point Cloud to visualize each cluster separately
+cluster_color = get_color_list(len(cluster_indices))
+color_cluster_point_list = []
+for j, indices in enumerate(cluster_indices):
+    for i, indice in enumerate(indices):
+        color_cluster_point_list.append([
+            white_cloud[indice][0],
+            white_cloud[indice][1],
+            white_cloud[indice][2],
+            rgb_to_float(cluster_color[j])
+        ])
+cluster_cloud = pcl.PointCloud_PointXYZRGB()
+cluster_cloud.from_list(color_cluster_point_list)
+# Convert PCL data to ROS messages
+ros_cluster_cloud = pcl_to_ros(cluster_cloud)
+# Publish ROS messages
+pcl_cluster_pub.publish(ros_cluster_cloud)
+```
 
-#### 1. For all three tabletop setups (`test*.world`), perform object recognition, then read in respective pick list (`pick_list_*.yaml`). Next construct the messages that would comprise a valid `PickPlace` request output them to `.yaml` format.
 
-And here's another image! 
-![demo-2](https://user-images.githubusercontent.com/20687560/28748286-9f65680e-7468-11e7-83dc-f1a32380b89c.png)
+#### 2. Complete Exercise 3 Steps | Object recognition implemented (extract features, train SVM):
 
-Spend some time at the end to discuss your code, what techniques you used, what worked and why, where the implementation might fail and how you might improve it if you were going to pursue this project further.  
+#### Extract Features
+* I captured 300 features for each objects listed in [pick_list_1.yaml](./pr2_robot/config/pick_list_1.yaml), [pick_list_1.yaml](./pr2_robot/config/pick_list_2.yaml), and [pick_list_3.yaml](./pr2_robot/config/pick_list_3.yaml), using [capture_features.py](./sensor_stick_scripts/capture_features.py)
+* (pro tip) Set gazebo gui attribute to false in training.launch file (within sensor_stick package) to speed up rate of feature capture 
+
+##### Compute Color Histograms
+* In process of reading RGB data from the point clouds from each snapshot, I converted RGB data to HSV (hue-saturation-value) color space to increase robustness of object recognition (RGB is sensitive to changes in brightness etc.)
+* I used 32 bins, so roughly 12.5% of color data would fall into each bin (initially, I experimented with larger number of bins but didn't see increase in performance enough to justify increase in processing time larger number bins brought on)
+
+```python
+ # Compute color histograms
+  nbins = 32
+  bins_range = (0, 256)
+  channel_1_hist = np.histogram(channel_1_vals, bins=nbins, range=bins_range)
+  channel_2_hist = np.histogram(channel_2_vals, bins=nbins, range=bins_range)
+  channel_3_hist = np.histogram(channel_3_vals, bins=nbins, range=bins_range)
+  # Concatenate and normalize the histograms
+  hist_features = np.concatenate((
+      channel_1_hist[0], channel_2_hist[0], channel_3_hist[0])).astype(np.float64)
+  normed_features = hist_features / np.sum(hist_features)
+  # Return the feature vector
+  return normed_features 
+```
+
+##### Compute Normal Histograms
+* Surface normal values all fall in range of -1 to 1. Likewise, as opposed to bins_range of (0,256) used for color histograms, for normal histograms I set a bins_range of (-1,1)
+
+```python
+# Compute normal histograms (just like with color)
+nbins = 32
+bins_range = (-1, 1)
+norm_x_hist = np.histogram(norm_x_vals, bins=nbins, range=bins_range)
+norm_y_hist = np.histogram(norm_y_vals, bins=nbins, range=bins_range)
+norm_z_hist = np.histogram(norm_z_vals, bins=nbins, range=bins_range)
+# Concatenate and normalize the histograms
+hist_features = np.concatenate((
+    norm_x_hist[0], norm_y_hist[0], norm_z_hist[0])).astype(np.float64)
+normed_features = hist_features / np.sum(hist_features)
+# Return the feature vector
+return normed_features
+```
+
+#### Train SVM
+* Sklearn has a nifty function called [GridSearchCV](http://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html) that allows one to specify a range of C values, gamma values, and kernels, and essentially extract the classifier (and set of params) that perform best for given dataset. I used this function to help me settle on a sigmoid kernel for trained SVM. GridSearchCV ultimately recommended a sigmoid classifer with C=93 and gamma=.001 with accuracy of 93% for the 2400 feature [training_set.sav](./output/training_set.sav)
+* However, I found that although the classifier recommended by GridSearchCV had high accuracy rates in training (and performed perfectly in test1.world and test2.world) the classifier only correctly recognized 7/8 objects in test3.world (consistently misclassified glue for biscuits)
+* Using the classifier recommendation given by GridSearchCV as a basepoint and tinkering around a bit with the values for C and gamma, I settled on a sigmoid classifier with param values of C=40 and gamma=.0001. This classifier has slighly lower accuracy (90%) than the classifier recommended by GridSearchCV but performs perfectly in all three worlds.
+* I am guessing the classifer recommended by GridSearchCV slightly suffered from overfitting. Likewise, it makes sense by final classifier performed better because I lowered C (which controls tradeoff between smooth decision boundary and classifying points correctly; higher C results in greater emphasis on classifying points correctly) and gamma (which defines how far the influence of a single training example reaches; higher gamma results in greater emphasis on fitting close points)
+
+##### Normalized Confusion Matrix (Sigmoid, C=.40, gamma=.0001, accuracy=90%)
+<p align="center"> <img src="./output/normalized_confusion_matrix_sigmoid_c40_gamma001_features2400.png"></p>
 
 
 
